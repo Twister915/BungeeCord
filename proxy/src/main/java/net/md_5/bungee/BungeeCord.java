@@ -396,6 +396,7 @@ public class BungeeCord extends ProxyServer
                 {
                     try
                     {
+                        plugin.getSubscribedEventHandlers().unsubscribe();
                         plugin.onDisable();
                         for ( Handler handler : plugin.getLogger().getHandlers() )
                         {

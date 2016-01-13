@@ -10,6 +10,14 @@ import lombok.Getter;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.config.ConfigurationAdapter;
 import net.md_5.bungee.api.scheduler.GroupedThreadFactory;
+import net.md_5.bungee.api.scheduler.RxBungeeScheduler;
+import net.md_5.bungee.event.EventExecutor;
+import net.md_5.bungee.event.EventPriority;
+import rx.Observable;
+import rx.Subscriber;
+import rx.functions.Action0;
+import rx.subscriptions.CompositeSubscription;
+import rx.subscriptions.Subscriptions;
 
 /**
  * Represents any Plugin that may be loaded at runtime to enhance existing
@@ -26,6 +34,10 @@ public class Plugin
     private File file;
     @Getter
     private Logger logger;
+    @Getter
+    private CompositeSubscription subscribedEventHandlers = new CompositeSubscription();
+    @Getter
+    private RxBungeeScheduler rxScheduler = new RxBungeeScheduler(this);
 
     /**
      * Called when the plugin has just been loaded. Most of the proxy will not
@@ -77,8 +89,8 @@ public class Plugin
     /**
      * Called by the loader to initialize the fields in this plugin.
      *
+     * @param proxy The ProxyServer
      * @param description the description that describes this plugin
-     * @param jarfile this plugins jar or container
      */
     final void init(ProxyServer proxy, PluginDescription description)
     {
@@ -86,6 +98,44 @@ public class Plugin
         this.description = description;
         this.file = description.getFile();
         this.logger = new PluginLogger( this );
+    }
+
+    final <T extends Event> Observable<T> observeEvent(final Class<? extends T>... classes) {
+        return Observable.create(new Observable.OnSubscribe<T>() {
+            @Override
+            public void call(final Subscriber<? super T> subscriber) {
+                final EventExecutor eventExecutor = new EventExecutor() {
+                    @SuppressWarnings("unchecked")
+                    @Override
+                    public void handleEvent(Object event) {
+                        Class<?> eventClass = event.getClass();
+                        boolean applies = false;
+                        for (Class<? extends T> classMember : classes) {
+                            if (classMember.isAssignableFrom(eventClass)) {
+                                applies = true;
+                                break;
+                            }
+                        }
+
+                        if (!applies)
+                            return;
+
+                        subscriber.onNext((T) event);
+                    }
+                };
+
+                proxy.getPluginManager().registerExecutor(Plugin.this, eventExecutor);
+                subscriber.onStart();
+                subscribedEventHandlers.add(subscriber);
+                subscriber.add(Subscriptions.create(new Action0() {
+                    @Override
+                    public void call() {
+                        subscribedEventHandlers.remove(subscriber);
+                        proxy.getPluginManager().unregisterExecutor(eventExecutor);
+                    }
+                }));
+            }
+        }).observeOn(rxScheduler);
     }
 
     //

@@ -29,6 +29,7 @@ import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.event.EventBus;
+import net.md_5.bungee.event.EventExecutor;
 import net.md_5.bungee.event.EventHandler;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
@@ -53,6 +54,7 @@ public class PluginManager
     private Map<String, PluginDescription> toLoad = new HashMap<>();
     private final Multimap<Plugin, Command> commandsByPlugin = ArrayListMultimap.create();
     private final Multimap<Plugin, Listener> listenersByPlugin = ArrayListMultimap.create();
+    private final Multimap<Plugin, EventExecutor> executorsByPlugin = ArrayListMultimap.create();
 
     @SuppressWarnings("unchecked")
     public PluginManager(ProxyServer proxy)
@@ -404,6 +406,11 @@ public class PluginManager
         listenersByPlugin.put( plugin, listener );
     }
 
+    public void registerExecutor(Plugin plugin, EventExecutor executor) {
+        eventBus.registerExecutor(executor);
+        executorsByPlugin.put(plugin, executor);
+    }
+
     /**
      * Unregister a {@link Listener} so that the events do not reach it anymore.
      *
@@ -415,6 +422,11 @@ public class PluginManager
         listenersByPlugin.values().remove( listener );
     }
 
+    public void unregisterExecutor(EventExecutor eventExecutor) {
+        eventBus.unregisterExecutor(eventExecutor);
+        executorsByPlugin.values().remove(eventExecutor);
+    }
+
     /**
      * Unregister all of a Plugin's listener.
      */
@@ -423,6 +435,12 @@ public class PluginManager
         for ( Iterator<Listener> it = listenersByPlugin.get( plugin ).iterator(); it.hasNext(); )
         {
             eventBus.unregister( it.next() );
+            it.remove();
+        }
+
+        for ( Iterator<EventExecutor> it = executorsByPlugin.get( plugin ).iterator(); it.hasNext(); )
+        {
+            eventBus.unregisterExecutor( it.next() );
             it.remove();
         }
     }

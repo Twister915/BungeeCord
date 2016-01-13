@@ -3,12 +3,7 @@ package net.md_5.bungee.event;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -20,6 +15,7 @@ public class EventBus
 
     private final Map<Class<?>, Map<Byte, Map<Object, Method[]>>> byListenerAndPriority = new HashMap<>();
     private final Map<Class<?>, EventHandlerMethod[]> byEventBaked = new ConcurrentHashMap<>();
+    private final Set<EventExecutor> eventExecutors = new HashSet<>();
     private final Lock lock = new ReentrantLock();
     private final Logger logger;
 
@@ -35,6 +31,10 @@ public class EventBus
 
     public void post(Object event)
     {
+        for (EventExecutor eventExecutor : eventExecutors)
+            eventExecutor.handleEvent(event);
+
+
         EventHandlerMethod[] handlers = byEventBaked.get( event.getClass() );
 
         if ( handlers != null )
@@ -122,6 +122,24 @@ public class EventBus
             }
         } finally
         {
+            lock.unlock();
+        }
+    }
+
+    public void registerExecutor(EventExecutor executor) {
+        lock.lock();
+        try {
+            eventExecutors.add(executor);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void unregisterExecutor(EventExecutor executor) {
+        lock.lock();
+        try {
+            eventExecutors.remove(executor);
+        } finally {
             lock.unlock();
         }
     }
